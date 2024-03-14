@@ -2,7 +2,7 @@
 
 # create helper
 cd [set pwd [file dirname [file normalize [info script]]]]
-source format
+source postformat
 
 cd $pwd
 
