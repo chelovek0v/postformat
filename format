@@ -1,0 +1,822 @@
+#!/usr/bin/tclsh
+
+set pwd [pwd]
+
+cd [set scriptDirectory [file dirname [file normalize [info script]]]]
+source debug.tcl
+
+cd $pwd
+
+proc linesFromScript {script} {
+	foreach _ [split $script \n] { lappend result [string trim $_] }
+
+	return [lsearch -not -all -inline $result {}]
+}
+
+proc merge! {name1 name2} {
+	upvar 1 $name1 array1
+	upvar 1 $name2 array2
+	array set array1 [concat [array get array1] [array get array2]]
+}
+
+proc concat! {listName args} {
+	upvar $listName list
+	if {[info exists list]} {
+		set list [concat $list {*}$args]
+	} else {
+		set list [concat {*}$args]
+	}
+}
+
+namespace eval ::Meta {
+	variable version {1.0}
+	
+	# Prints header navigation (default).
+	variable header {}
+	
+	proc hash {} {
+		variable path
+		set result [string trim [exec -- git log {--pretty="%h"} -1 -- $path] {"}]
+		
+		if {$result ne {}} {
+			return $result
+		} else {
+			error "No hash for file at $path"
+		}
+	}
+}
+
+set elementNamespaceScript {
+	namespace path [namespace parent]
+
+
+	##################################################################
+	# Behaviour
+	##################################################################
+		
+	set Behaviour(Multiline) 0
+	set Behaviour(Exact) 0
+	set Behaviour(Oneoff) 0
+	
+	proc multiline {} {
+		variable Behaviour
+		set Behaviour(Multiline) 1
+		
+		# Make it 100% idempotent.
+		variable ReadHooks
+		
+		append ReadHooks(Matched) {;} {
+			continue
+		}
+	}
+	
+	proc oneoff {} {
+		variable Behaviour
+		set Behaviour(Oneoff) 1
+		
+		
+		#
+		# Match hooks.
+		#	
+		
+		variable MatchHooks
+		
+		append MatchHooks(Start) {;} {
+			if [info exists ::Document::matched([namespace current])] {
+				return ended
+			}
+		}
+		
+		
+		#
+		# Read hooks.
+		#	
+		
+		variable ReadHooks
+		
+		append ReadHooks(Ended) {;} {
+			if {$linesRead > 0} {
+				set ::Document::matched([namespace current]) 1
+			}
+		}
+	}	
+	
+	proc exact {} {
+		variable Behaviour
+		set Behaviour(Exact) 1
+	
+	
+		#
+		# Read hooks.
+		#	
+		
+		variable ReadHooks
+		append ReadHooks(Before) {;} {
+			variable MatchedPatterns [dict create]
+		}
+		
+		append ReadHooks(Matched) {;} {
+			if {$lineno >= [llength $lines]} {
+				debug::puts "Invalid: can't fulfill exact requirements (\$lineno >= \[llength \$lines\])."
+				return 0
+			}
+			
+			continue
+		}
+		
+
+		#
+		# Match hooks.
+		#					
+		
+		variable MatchHooks
+		
+		append MatchHooks(Start) {;} {
+			variable MatchedPatterns
+		}
+		
+		append MatchHooks(BeforeMatch) {;} {
+			if {$pattern in [dict keys $MatchedPatterns]} {
+				debug::puts "Pattern {$pattern} matched before."
+				continue
+			} 
+		}
+		
+		append MatchHooks(Matched) {;} {
+			debug::puts "Pattern {$pattern} matched."
+			dict incr MatchedPatterns $pattern
+		}
+		
+		append MatchHooks(End) {;} {
+			if {[dict keys $MatchedPatterns] eq [dict keys $MatchPatterns]} {
+				debug::puts "Exact match (ended)."
+				return ended
+			} else {
+				debug::puts "Rejected. [dict keys $MatchedPatterns] ne [dict keys $MatchPatterns]"
+				return rejected
+			}
+		}
+	}	
+	
+	##################################################################
+	# Hooks
+	##################################################################
+	
+	proc do {script} {
+		variable DoScript $script
+	}
+
+	variable WhenHooks [dict create]
+	
+	proc when {hook script} {
+		variable ReadHooks
+		variable MatchHooks
+		variable Behaviour
+		
+		if {$hook eq {matched}} {
+			append MatchHooks(Matched) {;} $script
+		} elseif {$hook eq {completed}} {
+			if {$Behaviour(Multiline) || $Behaviour(Exact)} {
+				append ReadHooks(Ended) {;} $script
+			} else {
+				append ReadHooks(Matched) {;} $script
+			}	
+		} else {
+			dict lappend $hook $script
+		}
+	}
+	
+	
+	variable ReplacePatterns [list]
+
+	proc replaces {in out} {
+		variable ReplacePatterns
+		lappend ReplacePatterns $in $out
+	}
+
+	proc matches {script} {
+		if {[llength $script] == 1} {
+			variable MatchPatterns [dict create $script {1 2}]
+		} else {
+			
+			#
+			# Reset variable before.
+			#
+			
+			variable MatchPatterns [dict create]
+			foreach line [linesFromScript $script] {
+				Matches {*}$line	
+			}
+		}
+	}
+	
+	proc Matches {pattern _ args} {
+		variable MatchPatterns
+		dict set MatchPatterns $pattern $args
+	}
+	
+	
+	proc starts {pattern} {variable StartPattern $pattern }
+	proc ends {pattern} {variable EndPattern $pattern }
+
+	
+	proc exports {name} {
+		variable Exports
+		lappend Exports $name
+	}
+
+
+	proc prints {script} {
+		variable PrintScript $script
+	}
+
+ 	variable Embedding {}
+ 	
+ 	proc embedding? {} {
+ 		variable Embedding
+ 		if {$Embedding ne {}} {
+ 			return $Embedding
+ 		} else {
+ 			if {[namespace parent] eq {::}} {
+ 				return $Embedding
+			} else {
+ 				return [[namespace parent]::embedding?]
+			}
+ 		}
+ 	}
+
+ 	proc shouldStopEmbedding {line} {
+ 		variable EndPattern
+
+ 		if ![info exists EndPattern] {
+ 			return 0
+ 		}
+
+ 		if {[embedding?] eq [namespace tail [namespace current]] && [regexp $EndPattern $line _ endMatch]} {
+ 			if {$endMatch ne {}} {
+ 				variable Match
+ 				lappend Match $endMatch
+ 			}
+ 			debug::puts "* Matched (End) [namespace current]! “$line”"
+ 			return 1
+		} else {
+			return 0
+		}
+ 	}
+
+ 	proc matchEmbedding {line} {
+ 		variable StartPattern
+ 		if ![info exists StartPattern] {
+ 			return skip
+ 		}
+
+ 		# Refactor.
+ 		variable Embedding
+ 		if {$Embedding ne {}} {
+ 			return wait
+ 		} elseif [regexp -- $StartPattern $line _ startMatch] {
+ 			variable Match
+ 			# Refactor use append???
+ 			if {$startMatch ne {}} {
+	 			lappend Match $startMatch
+ 			}
+ 			
+ 			return match
+		} else {
+			return ended
+		}
+ 	}
+
+ 	set MatchHooks(Start) {}
+ 	set MatchHooks(BeforeMatch) {}	
+ 	set MatchHooks(Matched) {}	
+ 	set MatchHooks(End) {}	
+ 
+ 	proc Match {line} {
+ 		variable MatchPatterns
+		if ![info exists MatchPatterns] {
+			return skip
+		}
+		
+		variable MatchHooks
+		eval $MatchHooks(Start)
+	
+		dict for {pattern captureNames} $MatchPatterns {
+			eval $MatchHooks(BeforeMatch)	
+			
+			# Refactor use plain set with a qualifier.	
+			foreach name $captureNames {variable $name}
+			
+			if {[regexp -- $pattern $line _ {*}$captureNames]} {
+				
+				if {[set [lindex $captureNames 0]] eq {}} {
+					# use range instead of \$line
+					set [lindex $captureNames 0] $line
+				}
+		
+				# capture names are defaults match is treated as list always	
+				if {{match} in $captureNames || $captureNames eq {1 2}} {
+					variable Match
+					lappend Match [set [lindex $captureNames 0]]
+				}
+				
+				eval $MatchHooks(Matched)	
+				
+				return matched
+			}
+		}
+	
+		eval $MatchHooks(End)	
+		
+		return ended
+ 	}
+
+ 	proc read {text} {
+		Read [split $text "\n"]
+ 	}
+
+ 	proc readFile {path} {
+
+ 		set ::Meta::path $path
+ 		
+ 		cd [pwd]
+ 			
+		#	
+		# Split actual text and meta.
+		# Use File Separator ASCII code to split a file.
+		# Evaluate meta code at global level.
+		#	
+
+		set file [open $path r]
+
+		set fileSeparator [format %c 28]
+		lassign [split [::read $file] $fileSeparator] text metaScript
+
+		namespace inscope ::Meta $metaScript
+
+		read $text
+ 	}
+
+ 	proc resets {} {
+		variable ShouldRunScript 1
+ 	}
+ 	
+	variable ShouldRunScript 1
+
+	set ReadHooks(Before) {}
+	set ReadHooks(Matched) {}
+	set ReadHooks(Ended) {}
+	
+	proc Read {lines {lineno 0}} {
+		global scriptRegistry	
+		variable ShouldRunScript
+		if $ShouldRunScript {
+			set name [namespace tail [namespace current]]	
+		
+			# Refactor: why no else and error?	
+			if [info exists scriptRegistry($name)] {
+				eval [set scriptRegistry($name)]
+			}
+				
+			set ShouldRunScript 0
+			
+			variable Script
+			if [info exists Script] {
+				eval $Script
+			}	
+		}
+
+		#
+		# Init aggregates.
+		#
+
+		variable Content [list]
+		variable Match [list]
+		
+		variable ReadHooks
+		eval $ReadHooks(Before)
+		
+		UnsetAllUserVariables
+		
+		set linesRead 0
+
+		while {$lineno < [llength $lines]}	 {
+			set line [lindex $lines $lineno]
+
+			if [shouldStopEmbedding $line] {
+				debug::puts "Stop embedding."
+
+				incr linesRead
+				incr lineno
+
+				variable Embedding
+				if {$Embedding ne {}} {
+					variable Embedding {}
+					return $linesRead
+				} else {
+					return -code 255 $linesRead
+				}
+			}
+
+			switch [matchEmbedding $line] {
+				match {
+					debug::puts "Match (embedding)."
+					incr linesRead
+					incr lineno
+					variable Embedding [namespace tail [namespace current]]
+				} 			
+				ended {
+					debug::puts "No match (embedding)."
+					return $linesRead
+				}
+				wait {
+					debug::puts "Wait (embeddings)."
+				}
+				skip {}
+				default {
+					error "An unknown option returned from matchEmbedding."
+				}
+			}
+ 				
+ 				
+ 			#
+ 			# Hack: used to update line after matchEmbedding.
+ 			#
+ 			
+			set line [lindex $lines $lineno]
+			
+			switch [Match $line] {
+				matched {
+					# Refactor: move.
+					variable DoScript
+					if {[info exists DoScript] && $DoScript ne {}} {
+						namespace inscope [namespace current] $DoScript
+					}
+					
+					incr linesRead	
+					incr lineno
+				
+					debug::puts "Matched at $lineno “$line”"	
+					eval $ReadHooks(Matched)
+					break
+				}
+				ended {
+					eval $ReadHooks(Ended)
+					break
+				}
+				rejected {
+					return 0
+				}
+				skip {}
+				default {
+					error "An unknown option returned from match."
+				}
+			}
+
+			
+
+
+			set readOnce 0
+
+			variable Children
+			foreach namespace $Children {
+				debug::group "$namespace started reading at $lineno"
+					set code [catch {${namespace}::Read $lines $lineno} _linesRead]
+				debug::puts "Lines read: $_linesRead"
+				debug::endGroup
+				set readOnce [expr {$_linesRead > 0 || $readOnce}]
+				debug::puts "⇢ [namespace current]\n"
+
+				if {$code == 255} {
+					variable Embedding
+					if {$Embedding eq [namespace tail [namespace current]]} {
+
+						concat! Content [${namespace}::linesToPrint]
+
+						SaveExportedVariables $namespace
+
+						incr linesRead $_linesRead
+						incr lineno $_linesRead
+
+						variable Embedding {}
+
+						return $linesRead	
+					} else {
+						incr linesRead $_linesRead
+						incr lineno $_linesRead
+						return -code 255 $linesRead	
+					}
+				}
+
+				if  {$_linesRead > 0} {
+					concat! Content [${namespace}::linesToPrint]
+
+					SaveExportedVariables $namespace
+
+					incr linesRead $_linesRead
+					incr lineno $_linesRead
+
+					break
+				} 
+			}	
+					
+
+
+			if {!$readOnce} {
+				debug::puts "Actual skip"
+				incr linesRead
+				incr lineno
+			}
+		}
+
+		
+		foreach varname [UserVariables] {
+			if {![info exists $varname] || [array exists $varname]} { continue }
+			set $varname [Replace [set $varname]]
+		}
+		
+		variable Match
+		set replacedMatch [list]
+		foreach match $Match {
+			lappend replacedMatch [Replace $match]
+		}
+		variable Match $replacedMatch
+		
+		set replacedContent [list]
+		foreach content $Content {
+			lappend replacedContent [Replace $content]
+		}
+		set Content $replacedContent
+		
+		return $linesRead
+	}
+	
+	proc SaveExportedVariables {ns} {
+		if ![info exists ${ns}::Exports] {
+			return	
+		}
+		
+		foreach varname [set ${ns}::Exports] {
+			variable $varname
+			if [info exists ${ns}::${varname}] {
+				merge! $varname ${ns}::${varname}
+			}
+		}
+	}
+
+	proc print {{chan stdout}} {
+		set lines [linesToPrint]	
+		
+		# eval $ReadHooks(Print)
+		
+		foreach line $lines {
+			puts $chan $line
+		}
+	}
+	
+	proc printed {{chan stdout}} {
+		join [linesToPrint] \n
+	}
+
+	proc linesToPrint {} {
+		variable PrintScript
+		if {![info exists PrintScript]} {
+			return [list]	
+		}
+		
+		variable Content
+		variable Match
+
+		ImportAllUserVariables
+
+		#
+		# Refactor.
+		#
+
+		set matchScript {
+			[info exists Match] && [string first {$match} $scriptLine] != -1
+		}
+		set contentScript {
+			[info exists Content] && [string first {$content} $scriptLine] != -1
+		}
+
+		# !!!
+		set result {}
+
+		foreach scriptLine [linesFromScript $PrintScript] {
+			if {[catch {namespace inscope ::Meta subst -nocommands $scriptLine}] == 0} {
+				set scriptLine [namespace inscope ::Meta subst -nocommands $scriptLine]
+			}
+			
+			if $contentScript {
+				foreach content $Content {
+					# Refactor: consider to remove string trim.
+					
+					set substitutedContent [string trim [subst $scriptLine]]
+					if {[catch {subst $substitutedContent} _ errorOpt] == 0} {
+						set substitutedContent [subst $substitutedContent]
+						lappend result $substitutedContent
+					} else {
+						debug::puts "Double substitution failed at $substitutedContent\n$errorOpt"
+						lappend result $substitutedContent
+					}
+				}
+			} elseif $matchScript {
+				foreach match $Match {
+					lappend result [subst -nocommands $scriptLine]
+				}
+			} else {
+				if {[catch {subst $scriptLine}] == 0} {
+					lappend result [subst $scriptLine]
+				} else {
+					debug::puts "Substitution failed at $scriptLine."
+				} 
+			}
+		}
+		
+		return $result
+	}
+
+
+	##################################################################
+	# User Variables
+	##################################################################
+
+	proc UserVariables {} {
+		set pattern {[_a-z0-9]*}
+		info vars [namespace current]::${pattern}
+	}	
+	
+	proc ImportAllUserVariables {} {
+		uplevel {
+			set pattern {[_a-z0-9]*}
+			set variables [info vars [namespace current]::${pattern}]
+			foreach var $variables {
+				variable [namespace tail $var]
+			}
+		}
+	}
+	
+	proc UnsetAllUserVariables {} {
+		set pattern {[_a-z0-9]*}
+		set variables [info vars [namespace current]::${pattern}]
+		
+		foreach var $variables {
+			variable $var
+			unset -nocomplain -- $var
+		}
+	}
+	
+	proc Replace {line} {
+		set result $line
+
+		variable ReplacePatterns
+
+		foreach {in out} $ReplacePatterns {
+			set replaced [regsub -all $in $result $out result]
+			if {$replaced} {
+				debug::puts "Replaced {$in} {$out}."
+				debug::puts "Before: “$line”"
+				debug::puts "After “$result”"
+			}
+		}
+
+		return $result
+	}
+
+	
+	namespace unknown handler
+
+	proc handler {args} {
+		set name [lindex $args 0]
+		set script [lindex $args 1]
+
+		if {[string index $name 0] eq "@"} {
+			debug::puts "Applied constatnt $name to [namespace current]"
+			
+			global $name
+			
+			namespace inscope [namespace current] [set $name]
+
+			return
+		} elseif {[string is upper [string index $name 0]] && [llength $args] == 2} {
+
+			#
+			# Exception for embeddings: make script lazy to avoid recursion.
+			#
+
+			variable Children
+			global elementNamespaceScript
+
+			lappend Children [namespace current]::$name
+			namespace eval $name $elementNamespaceScript
+			
+			global scriptRegistry
+			if {[info exists scriptRegistry($name)] && $script ne [set scriptRegistry($name)]} {
+				append [namespace current]::${name}::Script {;} $script
+			} else {
+			}
+		} else {
+			return "<mark>$args</mark>"
+			error "Trying to execute $args"
+		}
+	}
+}
+
+set scriptRegistry() {}
+
+namespace eval Document $elementNamespaceScript {;} {
+	proc handler {args} {
+		set name [lindex $args 0]
+		set script [lindex $args 1]
+		
+		if {[string index $name 0] eq "@"} {
+			debug::puts "[namespace current] Set global variable $name."
+			global $name
+			set $name $script
+			
+			return
+		} elseif {[string is upper [string index $name 0]] && [llength $args] == 2} {
+	 		# Refactor: create set QualifiedName
+			variable Children
+			lappend Children [namespace current]::$name
+
+			#
+			# Create namespace with the default script.
+			# Apply the custom script to it. 
+			# Add variable with the name of a namespace and assing the script for later use.
+			#
+
+			#add assert first letter is upper
+			global elementNamespaceScript
+			namespace eval $name $elementNamespaceScript 
+		
+			global scriptRegistry
+			
+			if {![info exists scriptRegistry($name)]} {
+				set scriptRegistry($name) $script
+			}
+		} else {
+			return "<mark>$args</mark>"
+			error "Trying to execute $args"
+		}
+	}
+
+	proc configure {script} {
+		if {[lindex $script 0] eq "Document"} {
+			set script [lindex $script 1]
+		}
+	
+		global scriptRegistry	
+		append scriptRegistry(Document) {;} $script
+	}
+}
+
+
+
+if {[llength $argv] == 1} {
+	
+	#
+	# Assume there is a configuration in the working directory.
+	#
+	
+	cd $scriptDirectory	
+	if {[catch {open document.con r} cfgFile] == 0} {
+		set cfg [read $cfgFile]
+		Document::configure $cfg
+	} else {
+		error "No configuration file has been found."	
+	}
+	cd $pwd	
+	
+	set filePath [lindex $argv end]
+	Document::readFile $filePath
+	Document::print 
+} elseif {[llength $argv] == 2} {
+	set cfgPath [lindex $argv end-1]
+	if {[catch {open $cfgPath r} cfgFile] == 0} {
+		set cfg [read $cfgFile]
+		Document::configure $cfg
+	} else {
+		error "No configuration file has been found."	
+	}
+	set filePath [lindex $argv end]
+	Document::readFile $filePath
+	Document::print 
+} elseif {[llength $argv] == 3} {
+	set cfgPath [lindex $argv end-2]
+	
+	if {[catch {open $cfgPath r} cfgFile] == 0} {
+		set cfg [read $cfgFile]
+		Document::configure $cfg
+	} else {
+		error "No configuration file has been found."	
+	}
+	
+	set adhocConfiguration [lindex $argv end]
+	Document::configure $adhocConfiguration
+
+	set filePath [lindex $argv end-1]
+	Document::readFile $filePath
+	Document::print 
+}

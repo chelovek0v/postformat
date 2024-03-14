@@ -1,0 +1,562 @@
+#!/usr/bin/tclsh
+
+# create helper
+cd [set pwd [file dirname [file normalize [info script]]]]
+source format
+
+cd $pwd
+
+package require tcltest
+namespace import ::tcltest::*
+
+proc trimComments {lines} {
+	lsearch -not -all -inline $lines #*
+}
+
+# File Separator ASCII code.
+set fileSeparator [format %c 28]
+# Substitute ASCII code.
+set substitue [format %c 26]
+lassign [split [read [open [file tail [info script]] r]] $substitue] script data
+set inOutPairs [split $data $fileSeparator]
+
+
+set conScript [read [open document.con r]]
+Document::configure $conScript
+Document::configure {
+	prints {
+		$content
+	}
+}
+
+set currentLine 0
+set scriptNumberOfLines [llength [split $script \n]]
+
+foreach {in out} $inOutPairs {
+	
+	#
+	# Due to how split works I have to trim additional newlines.
+	#
+	# CHECK THIS AGAIN LATER.
+	#
+	
+	set in [string trimleft $in \n]
+	set out [string trimleft $out \n]
+
+	set message "At line [expr {$scriptNumberOfLines + 1 + $currentLine}]\n$in\n\a"
+	test format-0.1 $message -body {
+		Document::Read [trimComments [split $in \n]]
+		Document::print
+	} -output $out
+
+	incr currentLine [llength [split $in \n]]
+	incr currentLine [llength [split $out \n]]
+}
+
+cleanupTests
+
+#
+# Paragraph.
+#
+A paragraph.
+
+<p>A paragraph.</p>
+
+A longer paragraph without a dot at the end
+
+<p>A longer paragraph without a dot at the end</p>
+
+First paragraph.
+Second paragraph.
+Third paragraph.
+
+<p>First paragraph.</p>
+<p>Second paragraph.</p>
+<p>Third paragraph.</p>
+
+# With empty lines.
+First paragraph.
+
+Second paragraph.
+
+Third paragraph.
+
+<p>First paragraph.</p>
+<p>Second paragraph.</p>
+<p>Third paragraph.</p>
+
+# With empty lines 2.
+First paragraph.
+
+
+Second paragraph.
+
+
+Third paragraph.
+
+<p>First paragraph.</p>
+<p>Second paragraph.</p>
+<p>Third paragraph.</p>
+
+#
+# HR
+#
+***
+
+<hr>
+
+****
+
+<p>****</p>
+
+**
+
+<p>**</p>
+
+Paragraph.
+***
+
+<p>Paragraph.</p>
+<hr>
+
+# With an empty line.
+Paragraph.
+
+***
+
+<p>Paragraph.</p>
+<hr>
+
+Paragraph.
+
+***
+
+Last paragraph.
+
+<p>Paragraph.</p>
+<hr>
+<p>Last paragraph.</p>
+
+#
+# Plain inline links.
+#
+A paragraph with an inline link{/redline}.
+
+<p>A paragraph with an inline <a href="/redline">link</a>.</p>
+
+A paragraph with an inline link{/redline}. Lorem ipsum dolor sit amet.
+
+<p>A paragraph with an inline <a href="/redline">link</a>. Lorem ipsum dolor sit amet.</p>
+
+First{/link} word in the sentence.
+
+<p><a href="/link">First</a> word in the sentence.</p>
+
+First{https://google.com} word in the sentence.
+
+<p><a href="https://google.com">First</a> word in the sentence.</p>
+
+A inline link without a content {https://very.red}.
+
+<p>A inline link without a content <a href="https://very.red">https://very.red</a>.</p>
+
+A sentence with multiple links{/links}: link1{/link1}, and link2{/link2}. Another one without prefix word {https://nid.red}.
+
+<p>A sentence with multiple <a href="/links">links</a>: <a href="/link1">link1</a>, and <a href="/link2">link2</a>. Another one without prefix word <a href="https://nid.red">https://nid.red</a>.</p>
+
+#
+# Reference links.
+#
+A inline link without a content {0}.
+{0} https://some.link
+
+<p>A inline link without a content <a href="https://some.link">https://some.link</a>.</p>
+
+A ref link without a content {0} another word.
+
+{0} https://some.link/
+
+<p>A ref link without a content <a href="https://some.link/">https://some.link/</a> another word.</p>
+
+A inline link with a content{0}.
+{0} https://some.link
+
+<p>A inline link with a <a href="https://some.link">content</a>.</p>
+
+#
+# Mixed links.
+#
+A ref link without a content {0}. And other things{/redline}, like {http://this.one}.
+
+Paragrap with a link{1}, inside another one {2} in the middle of a sentence.
+
+{0} https://some.link/
+{1} https://second.link
+{2} https://third.link
+
+<p>A ref link without a content <a href="https://some.link/">https://some.link/</a>. And other <a href="/redline">things</a>, like <a href="http://this.one">http://this.one</a>.</p>
+<p>Paragrap with a <a href="https://second.link">link</a>, inside another one <a href="https://third.link">https://third.link</a> in the middle of a sentence.</p>
+
+#
+# Images.
+#
+{test.jpg}
+
+<figure>
+<img src="test.jpg"></img>
+</figure>
+
+{test.jpg, My caption.}
+
+<figure>
+<img src="test.jpg"></img>
+<figcaption>My caption.</figcaption>
+</figure>
+
+{test.jpg}
+Paragraph after.
+
+<figure>
+<img src="test.jpg"></img>
+</figure>
+<p>Paragraph after.</p>
+
+#
+# Quotes.
+#
+"
+Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+" Caption example.
+
+<figure>
+<blockquote>
+<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</blockquote>
+<figcaption>Caption example.</figcaption>
+</figure>
+
+"
+Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+"
+
+<figure>
+<blockquote>
+<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</blockquote>
+</figure>
+
+#
+# Details.
+#
+> My cool details title
+First paragraph.
+- First item
+- Second item
+- Third item
+Second paragraph.
+>
+
+<details>
+<summary>My cool details title</summary>
+<p>First paragraph.</p>
+<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>
+<p>Second paragraph.</p>
+</details>
+
+#
+# Code.
+#
+	<span>#!/bin/bash</span>
+	
+	lsof -i tcp:3000 
+	Caption: Listeners at tcp socket 3000.
+
+<figure>
+<pre>
+<code><span>#!/bin/bash</span></code>
+<code>	</code>
+<code>lsof -i tcp:3000 </code>
+</pre>
+<figcaption>Listeners at tcp socket 3000.</figcaption>
+</figure>
+
+	<span>#!/bin/bash</span>
+	
+	lsof -i tcp:3000 
+
+<figure>
+<pre>
+<code><span>#!/bin/bash</span></code>
+<code>	</code>
+<code>lsof -i tcp:3000 </code>
+</pre>
+</figure>
+
+	extension UserDefaults {
+		func removeAll() {
+			dictionaryRepresentation().keys.forEach { key in
+				removeObject(forKey: key)
+			}
+		}
+	}
+
+<figure>
+<pre>
+<code>extension UserDefaults {</code>
+<code>	func removeAll() {</code>
+<code>		dictionaryRepresentation().keys.forEach { key in</code>
+<code>			removeObject(forKey: key)</code>
+<code>		}</code>
+<code>	}</code>
+<code>}</code>
+</pre>
+</figure>
+
+#
+# Html.
+#
+<button>Button text</button>
+
+<button>Button text</button>
+
+<table>
+	<tr>
+		<th>First name</th>
+		<th>Last name</th>
+	</tr>
+	<tr>
+		<td>John</td>
+		<td>Doe</td>
+	</tr>
+	<tr>
+		<td>Jane</td>
+		<td>Doe</td>
+	</tr>
+</table>
+
+<table>
+<tr>
+<th>First name</th>
+<th>Last name</th>
+</tr>
+<tr>
+<td>John</td>
+<td>Doe</td>
+</tr>
+<tr>
+<td>Jane</td>
+<td>Doe</td>
+</tr>
+</table>
+
+<div>
+</div>
+
+<div>
+</div>
+
+<div>
+<p>Paragraph inside div.</p>
+</div>
+
+<div>
+<p>Paragraph inside div.</p>
+</div>
+
+#
+# Comlex.
+#
+A paragraph with an inline link{/link}.
+
+A paragraph with a reference{0} link, two_words{1}, {2}.
+
+{0} https://nid.red
+{1} https://google.com
+{2} localhost
+
+<p>A paragraph with an inline <a href="/link">link</a>.</p>
+<p>A paragraph with a <a href="https://nid.red">reference</a> link, <a href="https://google.com">two_words</a>, <a href="localhost">localhost</a>.</p>
+
+- First item
+- Second item
+- Third item
+1. First item
+2. Second item
+3. Third item
+&&&
+1. First item
+2. Second item
+3. Third item
+&&&
+
+<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>
+<ol>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ol>
+<section>
+<ol>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ol>
+</section>
+
+Headline
+--------
+
+First paragraph.
+
+
+Second Title
+------------
+
+A paragraph after second title.
+
+Last paragraph.
+
+<h1>Headline</h1>
+<p>First paragraph.</p>
+<h2>Second Title</h2>
+<p>A paragraph after second title.</p>
+<p>Last paragraph.</p>
+
+Headline
+--------
+
+First paragraph.
+
+&&&
+Hey you nice to talk to you
+Niceeee and slice.
+
+1. Hello
+2. World
+3. Nice to see you
+
+Paragraph inside.
+
+- First item
+- Second item
+- Third item
+&&&
+
+Paragraph after section. Also it's a last paragraph.
+
+<h1>Headline</h1>
+<p>First paragraph.</p>
+<section>
+<p>Hey you nice to talk to you</p>
+<p>Niceeee and slice.</p>
+<ol>
+<li>Hello</li>
+<li>World</li>
+<li>Nice to see you</li>
+</ol>
+<p>Paragraph inside.</p>
+<ul>
+<li>First item</li>
+<li>Second item</li>
+<li>Third item</li>
+</ul>
+</section>
+<p>Paragraph after section. Also it's a last paragraph.</p>
+
+Headline
+--------
+Headline paragraph.
+Title
+-----
+Title paragraph.
+Last Title
+----------
+Last title paragraph.
+
+<h1>Headline</h1>
+<p>Headline paragraph.</p>
+<h2>Title</h2>
+<p>Title paragraph.</p>
+<h2>Last Title</h2>
+<p>Last title paragraph.</p>
+
+<table>
+	<tr>
+		<th>First name</th>
+		<th>Last name</th>
+	</tr>
+	<tr>
+		<td>John</td>
+		<td>Doe</td>
+	</tr>
+	<tr>
+		<td>Jane</td>
+		<td>Doe</td>
+	</tr>
+</table>
+
+	<table>
+		<tr>
+			<th>First name</th>
+			<th>Last name</th>
+		</tr>
+		<tr>
+			<td>John</td>
+			<td>Doe</td>
+		</tr>
+		<tr>
+			<td>Jane</td>
+			<td>Doe</td>
+		</tr>
+	</table>
+
+<table>
+<tr>
+<th>First name</th>
+<th>Last name</th>
+</tr>
+<tr>
+<td>John</td>
+<td>Doe</td>
+</tr>
+<tr>
+<td>Jane</td>
+<td>Doe</td>
+</tr>
+</table>
+<figure>
+<pre>
+<code><table></code>
+<code>	<tr></code>
+<code>		<th>First name</th></code>
+<code>		<th>Last name</th></code>
+<code>	</tr></code>
+<code>	<tr></code>
+<code>		<td>John</td></code>
+<code>		<td>Doe</td></code>
+<code>	</tr></code>
+<code>	<tr></code>
+<code>		<td>Jane</td></code>
+<code>		<td>Doe</td></code>
+<code>	</tr></code>
+<code></table></code>
+</pre>
+</figure>
+
+	<span>
+<button>
+
+<figure>
+<pre>
+<code><span></code>
+</pre>
+</figure>
+<button>

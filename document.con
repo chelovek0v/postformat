@@ -1,0 +1,291 @@
+
+#
+# (12) In protocol design, perfection has been reached not when 
+# there is nothing left to add, but when there is nothing 
+# left to take away.
+#
+
+#
+# Domain of text editor/viewer on mobile:
+# * Medium (display with touch cap.).
+# * Text on display, brightness, frame.
+# * Visible and invisible characters and symbols.
+# * Masses of characters forming text.
+# * Blocks of text forming meaning.
+# * Clumsy interface ant text orientation.
+# * Small display.
+# * Word wrap.
+# * Small variance in font size.
+# * Short lines.
+# * Whitespace has most contrast.
+#
+# Domain of configuration:
+# * Connections, hierarchies.
+# * Free interpretation (interpretation of meaning).
+# * Blocks of text.
+# * Meaning of words, grammar hints.
+# * Commonness and alienation.
+# * Static and dynamic forms (interpretation of interpretation).
+# * Order and side.  
+# * Validity.
+#
+# Domain of target format (HTML):
+# * Blocks of text.
+# * Tags, attributes.
+# * Relations.
+# * Whitespace.
+# * Validity.
+# 
+
+@ReplaceRules {
+	# Escpae curly bracers.
+	replaces {\\\}} {\&#125;}
+	replaces {\\\{} {\&#123;}
+	# Escpae brackets.
+	replaces {\\\]} {\&#93;}
+	replaces {\\\[} {\&#91;}
+	# Escpae dollar sign.
+	replaces {\\\$} {\&#36;}
+}
+
+@ReplaceLinks {
+	# If you want to multi-word links: <a href='$links(0)'>Necto Mono</a> 
+	
+	# Reference links: ?word?[referenceNumber]
+	replaces {([\w_-]+)\{(\d+)\}} {<a href="$links(\2)">\1</a>}
+	replaces {\{(\d+)\}} {<a href="$links(\1)">$links(\1)</a>}
+	# Plain links: ?word?[url]
+	replaces {([\w_-]+)\{([^\{\}]*)\}} {<a href="\2">\1</a>}
+	replaces {\{([^\{\}]*)\}} {<a href="\1">\1</a>}
+}
+
+# Come up with ESCAPE synt.
+
+Headline {
+	matches {
+		{^.+$} to match
+		{^-+$} to _
+	}
+
+	oneoff
+	exact
+	
+	prints {
+		<h1>$match</h1>
+	}
+}
+
+Title {
+	exact
+	
+	matches {
+		{^.+$} to match
+		{^-+$} to _
+	}
+
+	prints {
+		<h2>$match</h2>
+	}
+}
+
+Section {
+	starts {&&&}
+	Document {
+		prints {
+			$content
+		}
+	}
+	ends {&&&}
+
+	multiline
+
+	prints {
+		<section>
+		$content
+		</section>
+	}
+}
+
+Html {
+	multiline 
+	
+	matches {^<.+>$}
+	
+	when matched {
+		matches {^\s*<.+>$}
+	}
+
+	when completed {
+		
+		#
+		# Resets back.
+		#
+		
+		matches {^<.+>$}
+	}
+
+	prints {
+		$match
+	}
+}
+
+Code {
+	multiline
+	
+	matches {
+		{^\tCaption:\s(.+)} to caption
+		{^\t(.*)} to match
+	}	
+	
+	@ReplaceRules 
+	@ReplaceLinks 
+	
+	prints {
+		<figure>
+		<pre>
+		<code>$match</code>
+		</pre>
+		<figcaption>$caption</figcaption>
+		</figure>
+	}
+}
+
+OrderedList {
+	multiline
+	
+	matches {^\d\.\ (.+)}
+
+	@ReplaceLinks
+	
+	prints {
+		<ol>
+		<li>$match</li>
+		</ol>
+	}
+}
+
+UnorderedList {
+	multiline
+	
+	matches {^-\ (.+)}
+	
+	@ReplaceLinks
+
+	prints {
+		<ul>
+		<li>$match</li>
+		</ul>
+	}
+}
+
+Details {
+	starts {^>\ (.+)$}
+	Document {
+		prints {
+			$content
+		}
+	}
+	ends {^>$}
+
+	prints {
+		<details>
+		<summary>$match</summary>
+		$content
+		</details>
+	}
+}
+
+Quote {
+	starts {^"$}
+	Paragraph {}
+	ends {^"\ ?(.+)?$}
+
+	prints {
+		<figure>
+		<blockquote>
+		$content
+		</blockquote>
+		<figcaption>$match</figcaption>
+		</figure>
+	}
+}
+
+Image {
+	matches {
+		{^\{(.+\.(?:png|jpg|jpeg|gif)),\ (.+)\}} to src caption
+		{^\{(.+\.(?:png|jpg|jpeg|gif))\}} to src
+	}	
+
+	@ReplaceLinks 
+	
+	prints {	
+		<figure>
+		<img src="$src"></img>
+		<figcaption>$caption</figcaption>
+		</figure> 
+	}
+}
+
+
+Link {
+	matches {^\{(\d+)\}\s*(.*)$}
+
+	exports links
+	
+	when matched {
+		debug::puts "1337"	
+	}
+	
+	do {
+		set links($1) $2
+	}
+}
+
+Hr {
+	matches {^\*\*\*$}
+
+	prints {
+		<hr>
+	}
+}
+
+Paragraph {
+	matches {.+}
+
+	@ReplaceRules
+	@ReplaceLinks
+	
+	# Quote.
+	replaces {"([\w…\ ,']+)"} {<q>\1</q>}
+
+	prints {
+		<p>$match</p>
+	}
+}
+
+prints {
+	<!doctype html>
+	<html lang="en-GB">
+	<head>
+	{{> partials/meta}}
+	<meta name="description" content="$description">
+	</head>
+	<body>
+	${::Meta::header}{{> partials/nav}}
+	<main>
+	<article>
+	$content
+	<footer>
+	<p>
+		<small>
+		<time datetime='$date'>$date</time>,
+		<a href='https://github.com/chelovek0v/nid.red/blob/[::Meta::hash]/$Meta::path'>[::Meta::hash]</a>,
+		PostFormat ($version)
+		</small>
+	</p>
+	</footer>
+	</article>
+	</main>
+	</body>
+	</html>
+}
