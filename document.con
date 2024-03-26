@@ -226,6 +226,24 @@ Image {
 	}
 }
 
+Video {
+	matches {
+		{^\{(.+\.(?:mp4|mov)),\ (.+)\}} to src caption
+		{^\{(.+\.(?:mp4|mov))\}} to src
+	}	
+
+	@ReplaceLinks 
+	
+	prints {	
+		<figure>
+			<video controls="" autoplay="" muted="" loop="" playsinline="">
+			<source type="video/mp4" src="$src">
+			</video>
+			<figcaption>$caption</figcaption>
+		</figure>
+	}
+}
+
 
 Link {
 	matches {^\{(\d+)\}\s*(.*)$}
@@ -286,6 +304,7 @@ prints {
 	</footer>
 	</article>
 	</main>
+	{{> partials/scripts}}
 	</body>
 	</html>
 }
