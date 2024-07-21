@@ -297,7 +297,7 @@ prints {
 	<p>
 		<small>
 		<time datetime='$date'>$date</time>,
-		<a href='https://github.com/vanka.me/blob/[::Meta::hash]/$Meta::path'>[::Meta::hash]</a>,
+		<a href='https://github.com/chelovek0v/vanka.me/blob/[::Meta::hash]/$Meta::path'>[::Meta::hash]</a>,
 		PostFormat ($version)
 		</small>
 	</p>
