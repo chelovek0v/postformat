@@ -231,7 +231,8 @@ set elementNamespaceScript {
 	}
 
  	variable Embedding {}
- 	
+ 
+ 	# EXPLANATION: recursively ask about nearest emedding.	
  	proc embedding? {} {
  		variable Embedding
  		if {$Embedding ne {}} {
@@ -366,7 +367,8 @@ set elementNamespaceScript {
 	set ReadHooks(Before) {}
 	set ReadHooks(Matched) {}
 	set ReadHooks(Ended) {}
-	
+
+	# Code analogy as for forks programming	
 	proc Read {lines {lineno 0}} {
 		global scriptRegistry	
 		variable ShouldRunScript
@@ -374,6 +376,7 @@ set elementNamespaceScript {
 			set name [namespace tail [namespace current]]	
 		
 			# Refactor: why no else and error?	
+			# EXPLANATION: initial script
 			if [info exists scriptRegistry($name)] {
 				eval [set scriptRegistry($name)]
 			}
@@ -475,7 +478,7 @@ set elementNamespaceScript {
 
 			
 
-
+			# TODO: rename, did some jobs, parsedSomething etc
 			set readOnce 0
 
 			variable Children
@@ -489,8 +492,9 @@ set elementNamespaceScript {
 
 				if {$code == 255} {
 					variable Embedding
+					# EXPLANATION: two different path, one for Embedding and on for Parent
 					if {$Embedding eq [namespace tail [namespace current]]} {
-
+						# For ones who expects embedding to end
 						concat! Content [${namespace}::linesToPrint]
 
 						SaveExportedVariables $namespace
@@ -502,6 +506,7 @@ set elementNamespaceScript {
 
 						return $linesRead	
 					} else {
+						# For embedding which is to end
 						incr linesRead $_linesRead
 						incr lineno $_linesRead
 						return -code 255 $linesRead	
@@ -709,6 +714,7 @@ set elementNamespaceScript {
 			global elementNamespaceScript
 
 			lappend Children [namespace current]::$name
+			# TODO: rename it to prototype, base, foundation
 			namespace eval $name $elementNamespaceScript
 			
 			global scriptRegistry
@@ -726,6 +732,7 @@ set elementNamespaceScript {
 set scriptRegistry() {}
 
 namespace eval Document $elementNamespaceScript {;} {
+	# TODO: state that we are overriding the handler.
 	proc handler {args} {
 		set name [lindex $args 0]
 		set script [lindex $args 1]
