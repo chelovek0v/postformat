@@ -287,6 +287,8 @@ prints {
 	<head>
 	{{> partials/meta}}
 	<meta name="description" content="$description">
+	[expr { $::Meta::columns ? {<link rel="stylesheet" href="columns.css">} : {} }]
+
 	</head>
 	<body>
 	${::Meta::header}{{> partials/nav}}

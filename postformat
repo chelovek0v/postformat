@@ -209,7 +209,9 @@ set elementNamespaceScript {
 			}
 		}
 	}
-	
+
+	# Skips the "to" helper word. TODO: examples of callsite.
+	# Maybe inline it in matches.
 	proc Matches {pattern _ args} {
 		variable MatchPatterns
 		dict set MatchPatterns $pattern $args
@@ -298,7 +300,8 @@ set elementNamespaceScript {
 		if ![info exists MatchPatterns] {
 			return skip
 		}
-		
+	
+		# TODO: add hooks documentation (directly available, context available)	
 		variable MatchHooks
 		eval $MatchHooks(Start)
 	
@@ -309,12 +312,14 @@ set elementNamespaceScript {
 			foreach name $captureNames {variable $name}
 			
 			if {[regexp -- $pattern $line _ {*}$captureNames]} {
-				
+
+				# TODO: refactor, use matchVar properly				
 				if {[set [lindex $captureNames 0]] eq {}} {
 					# use range instead of \$line
 					set [lindex $captureNames 0] $line
 				}
-		
+	
+				# TODO: change con syntax to make behaviour explicit	
 				# capture names are defaults match is treated as list always	
 				if {{match} in $captureNames || $captureNames eq {1 2}} {
 					variable Match
