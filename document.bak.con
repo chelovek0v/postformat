@@ -179,13 +179,13 @@ UnorderedList {
 }
 
 Details {
-	starts {^>+\ (.+)$}
+	starts {^>\ (.+)$}
 	Document {
 		prints {
 			$content
 		}
 	}
-	ends {^>+$}
+	ends {^>$}
 
 	prints {
 		<details>
@@ -268,8 +268,6 @@ Hr {
 }
 
 Paragraph {
-	multiline
-	
 	matches {.+}
 
 	@ReplaceRules
@@ -279,9 +277,7 @@ Paragraph {
 	replaces {"([\w…\ ,']+)"} {<q>\1</q>}
 
 	prints {
-		<p>
-		$match
-		</p>
+		<p>$match</p>
 	}
 }
 
