@@ -29,7 +29,7 @@ proc concat! {listName args} {
 }
 
 namespace eval ::Meta {
-	variable version {1.0}
+	variable version {0.1}
 	
 	# Prints header navigation (default).
 	variable header {}
