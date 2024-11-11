@@ -290,6 +290,7 @@ prints {
 	<html lang="en-GB">
 	<head>
 	{{> partials/meta}}
+	<title>$title</title>
 	<meta name="description" content="$description">
 	[expr { $::Meta::columns ? {<link rel="stylesheet" href="columns.css">} : {} }]
 

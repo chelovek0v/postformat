@@ -30,6 +30,7 @@ proc concat! {listName args} {
 
 namespace eval ::Meta {
 	variable version {0.1}
+	variable title {vanka.me}
 	
 	# Prints header navigation (default).
 	variable header {}
