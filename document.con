@@ -212,8 +212,8 @@ Quote {
 
 Image {
 	matches {
-		{^\{(.+\.(?:png|jpg|jpeg|gif)),\ (.+)\}} to src caption
-		{^\{(.+\.(?:png|jpg|jpeg|gif))\}} to src
+		{^\{(.+\.(?:png|jpg|jpeg|gif|webp)),\ (.+)\}} to src caption
+		{^\{(.+\.(?:png|jpg|jpeg|gif|webp))\}} to src
 	}	
 
 	@ReplaceLinks 
