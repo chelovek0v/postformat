@@ -412,6 +412,7 @@ set elementNamespaceScript {
 		while {$lineno < [llength $lines]}	 {
 			set line [lindex $lines $lineno]
 
+			debug::puts "Should stop?."
 			if [shouldStopEmbedding $line] {
 				debug::puts "Stop embedding."
 
@@ -426,7 +427,9 @@ set elementNamespaceScript {
 					return -code 255 $linesRead
 				}
 			}
+			debug::puts "No."
 
+			debug::puts "Try embedding."
 			switch [matchEmbedding $line] {
 				match {
 					debug::puts "Match (embedding)."
